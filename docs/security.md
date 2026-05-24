@@ -18,16 +18,16 @@ If network behavior is added later, this document, `README.md`, and `SECURITY.md
 
 ## macOS Capabilities Used
 
-- IOKit `HIDIdleTime` reads elapsed time since physical keyboard or pointer input.
-- `IOPMCopyAssertionsStatus` checks whether the system is preventing display sleep, which helps avoid false idle detection during videos, meetings, and presentations.
+- IOKit `HIDIdleTime` reads elapsed time since physical keyboard or pointer input so the UI can distinguish recent input from quiet screen time.
+- `IOPMCopyAssertionsStatus` checks whether the system is preventing display sleep, which keeps videos, meetings, and presentations classified as active screen time.
 - `NSWorkspace` screen sleep and session notifications reset the current session when the display sleeps or the user session resigns active.
 - `UNUserNotificationCenter` requests notification permission and delivers stand-up reminders.
 - `SMAppService.mainApp` registers or unregisters Start at Login only when the user toggles that setting.
-- SwiftUI `AppStorage` stores target and break timing preferences in local user defaults.
+- SwiftUI `AppStorage` stores the target timing preference in local user defaults.
 
 ## Data Handling
 
-The app does not collect, transmit, or persist detailed activity logs. It maintains the current session counters in memory and persists only user-selected timing settings through user defaults.
+The app does not collect, transmit, or persist detailed activity logs. It maintains the current session counters in memory and persists only the user-selected target timing setting through user defaults.
 
 ## Release Security Checklist
 

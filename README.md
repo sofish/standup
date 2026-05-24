@@ -1,12 +1,12 @@
 # Standup
 
-Standup is a native macOS menu bar app that reminds you to stand up after a configurable focus period. It tracks continuous screen-session time locally, resets after a real break, and shows a full-screen glass reminder overlay when the target is reached.
+Standup is a native macOS menu bar app that reminds you to stand up after a configurable focus period. It tracks continuous screen-session time locally, resets when the screen sleeps, the session locks, or you reset manually, and shows a full-screen glass reminder overlay when the target is reached.
 
 ## Features
 
 - Native SwiftUI menu bar app with no external runtime dependency.
-- Configurable focus target and break-reset duration.
-- Local screen-session tracking via macOS idle time and display-sleep assertions.
+- Configurable focus target.
+- Local screen-session tracking that keeps counting while the user session stays awake.
 - Full-screen reminder overlay with reset, Escape reset, auto-reset countdown, and later reminders.
 - Optional Start at Login support through macOS login item APIs.
 
@@ -27,7 +27,7 @@ open build/Standup.app
 
 ## Privacy And Security
 
-Standup is local-only in the current codebase. It does not include an app network client, telemetry, accounts, or cloud sync. It reads macOS idle and power assertion state, stores timing preferences in local user defaults, requests notification permission, and can register itself as a login item when the user enables Start at Login.
+Standup is local-only in the current codebase. It does not include an app network client, telemetry, accounts, or cloud sync. It reads macOS idle and power assertion state to distinguish recent input from quiet screen time, stores the target timing preference in local user defaults, requests notification permission, and can register itself as a login item when the user enables Start at Login.
 
 Security reporting is documented in [SECURITY.md](SECURITY.md). The implementation-level security model is documented in [docs/security.md](docs/security.md).
 

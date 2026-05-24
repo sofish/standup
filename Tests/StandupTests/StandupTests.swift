@@ -85,9 +85,9 @@ final class StandupTests: XCTestCase {
         XCTAssertTrue(buildScript.contains("<key>CFBundleIconFile</key>"))
         XCTAssertTrue(buildScript.contains("<string>AppIcon.icns</string>"))
         XCTAssertTrue(buildScript.contains("<key>CFBundleShortVersionString</key>"))
-        XCTAssertTrue(buildScript.contains("<string>1.0.1</string>"))
+        XCTAssertTrue(buildScript.contains("<string>1.0.2</string>"))
         XCTAssertTrue(buildScript.contains("<key>CFBundleVersion</key>"))
-        XCTAssertTrue(buildScript.contains("<string>2</string>"))
+        XCTAssertTrue(buildScript.contains("<string>3</string>"))
     }
 
     func testGeneratedAnimationUsesSequenceEndpoints() {
@@ -114,27 +114,22 @@ final class StandupTests: XCTestCase {
         let tracker = makeTracker()
 
         XCTAssertEqual(tracker.targetActiveSeconds, StandupTimingOptions.defaultTargetActiveSeconds)
-        XCTAssertEqual(tracker.breakThresholdSeconds, StandupTimingOptions.defaultBreakThresholdSeconds)
     }
 
     func testActivityTrackerAppliesTimingSelectionsImmediately() {
         let tracker = makeTracker()
 
         tracker.setTargetActiveSeconds(30 * 60)
-        tracker.setBreakThresholdSeconds(10 * 60)
 
         XCTAssertEqual(tracker.targetActiveSeconds, 30 * 60)
-        XCTAssertEqual(tracker.breakThresholdSeconds, 10 * 60)
     }
 
     func testActivityTrackerNormalizesUnsupportedTimingSelections() {
         let tracker = makeTracker()
 
         tracker.setTargetActiveSeconds(17)
-        tracker.setBreakThresholdSeconds(17)
 
         XCTAssertEqual(tracker.targetActiveSeconds, StandupTimingOptions.defaultTargetActiveSeconds)
-        XCTAssertEqual(tracker.breakThresholdSeconds, StandupTimingOptions.defaultBreakThresholdSeconds)
     }
 
     func testTimingOptionsNormalizeUnsupportedSelections() {
@@ -142,12 +137,7 @@ final class StandupTests: XCTestCase {
             StandupTimingOptions.normalizedTargetActiveSeconds(17),
             StandupTimingOptions.defaultTargetActiveSeconds
         )
-        XCTAssertEqual(
-            StandupTimingOptions.normalizedBreakThresholdSeconds(17),
-            StandupTimingOptions.defaultBreakThresholdSeconds
-        )
         XCTAssertEqual(StandupTimingOptions.normalizedTargetActiveSeconds(30 * 60), 30 * 60)
-        XCTAssertEqual(StandupTimingOptions.normalizedBreakThresholdSeconds(10 * 60), 10 * 60)
     }
 
     func testReminderOverlayCountdownDefaultsToFiveMinuteAutoReset() {
@@ -256,7 +246,6 @@ final class StandupTests: XCTestCase {
         // Given
         let tracker = makeTracker(idleTime: 0.0)
         tracker.idleThresholdSeconds = 10
-        tracker.breakThresholdSeconds = 30
         
         // When: User is active (idle time = 0 < threshold)
         tracker.tick()
@@ -267,11 +256,10 @@ final class StandupTests: XCTestCase {
         XCTAssertFalse(tracker.isIdle)
     }
     
-    func testShortIdleKeepsAccruingActiveTimeWhileBreakCountdownRuns() {
+    func testQuietInputKeepsAccruingScreenTime() {
         // Given
         let tracker = makeTracker(idleTime: 20.0)
         tracker.idleThresholdSeconds = 10
-        tracker.breakThresholdSeconds = 30
         tracker.activeSeconds = 100 // Start with some active time
         
         // When: User is idle
@@ -282,28 +270,26 @@ final class StandupTests: XCTestCase {
         XCTAssertEqual(tracker.idleSeconds, 1)
         XCTAssertTrue(tracker.isIdle)
         XCTAssertTrue(tracker.hasScreenSession)
-        XCTAssertTrue(tracker.isPossibleBreak)
+        XCTAssertTrue(tracker.isQuietScreenSession)
     }
 
-    func testIdleAtLaunchDoesNotStartActiveSession() {
+    func testAwakeScreenTimeStartsSessionEvenWithoutRecentInput() {
         let tracker = makeTracker(idleTime: 20.0)
         tracker.idleThresholdSeconds = 10
-        tracker.breakThresholdSeconds = 30
 
         tracker.tick()
 
-        XCTAssertEqual(tracker.activeSeconds, 0)
+        XCTAssertEqual(tracker.activeSeconds, 1)
         XCTAssertEqual(tracker.idleSeconds, 1)
         XCTAssertTrue(tracker.isIdle)
-        XCTAssertFalse(tracker.hasScreenSession)
-        XCTAssertFalse(tracker.isPossibleBreak)
+        XCTAssertTrue(tracker.hasScreenSession)
+        XCTAssertTrue(tracker.isQuietScreenSession)
     }
     
     func testMediaPlaybackKeepsUserActive() {
         // Given
         let tracker = makeTracker(idleTime: 20.0, displaySleepAssertion: true)
         tracker.idleThresholdSeconds = 10
-        tracker.breakThresholdSeconds = 30
         
         // When
         tracker.tick()
@@ -313,14 +299,13 @@ final class StandupTests: XCTestCase {
         XCTAssertEqual(tracker.idleSeconds, 0)
         XCTAssertFalse(tracker.isIdle)
         XCTAssertTrue(tracker.hasScreenSession)
-        XCTAssertFalse(tracker.isPossibleBreak)
+        XCTAssertFalse(tracker.isQuietScreenSession)
     }
     
-    func testLongBreakResetsActiveTime() {
+    func testLongQuietInputDoesNotResetAwakeScreenSession() {
         // Given
         let tracker = makeTracker(idleTime: 20.0)
         tracker.idleThresholdSeconds = 10
-        tracker.breakThresholdSeconds = 3 // 3 seconds break resets
         tracker.activeSeconds = 500
         
         // When: Idle for 1 tick
@@ -333,32 +318,32 @@ final class StandupTests: XCTestCase {
         XCTAssertEqual(tracker.activeSeconds, 502)
         XCTAssertEqual(tracker.idleSeconds, 2)
         
-        // Idle for 3rd tick (reaches breakThresholdSeconds)
+        // Idle for 3rd tick; screen time still counts while the display is awake.
         tracker.tick()
         
         // Then
-        XCTAssertEqual(tracker.activeSeconds, 0) // Reset!
-        XCTAssertEqual(tracker.idleSeconds, 0)
-        XCTAssertFalse(tracker.isIdle)
+        XCTAssertEqual(tracker.activeSeconds, 503)
+        XCTAssertEqual(tracker.idleSeconds, 3)
+        XCTAssertTrue(tracker.isIdle)
+        XCTAssertTrue(tracker.isQuietScreenSession)
     }
 
-    func testLongBreakClearsReminderState() {
+    func testQuietInputDoesNotClearReminderState() {
         // Given
         let tracker = makeTracker(idleTime: 20.0)
         tracker.idleThresholdSeconds = 10
-        tracker.breakThresholdSeconds = 2
         tracker.activeSeconds = 500
         tracker.needsStandUp = true
 
-        // When: User takes a full break
+        // When: User is quiet at the keyboard while the screen stays awake
         tracker.tick()
         tracker.tick()
 
         // Then
-        XCTAssertEqual(tracker.activeSeconds, 0)
-        XCTAssertEqual(tracker.idleSeconds, 0)
-        XCTAssertFalse(tracker.isIdle)
-        XCTAssertFalse(tracker.needsStandUp)
+        XCTAssertEqual(tracker.activeSeconds, 502)
+        XCTAssertEqual(tracker.idleSeconds, 2)
+        XCTAssertTrue(tracker.isIdle)
+        XCTAssertTrue(tracker.needsStandUp)
     }
 
     func testManualResetClearsReminderState() {
@@ -402,10 +387,9 @@ final class StandupTests: XCTestCase {
         XCTAssertEqual(tracker.activeSeconds, 6)
     }
 
-    func testShortIdleCanStillReachReminderTarget() {
+    func testQuietInputCanStillReachReminderTarget() {
         let tracker = makeTracker(idleTime: 20.0)
         tracker.idleThresholdSeconds = 10
-        tracker.breakThresholdSeconds = 30
         tracker.targetActiveSeconds = 5
         tracker.activeSeconds = 4
 
@@ -416,7 +400,7 @@ final class StandupTests: XCTestCase {
         XCTAssertEqual(tracker.activeSeconds, 5)
         XCTAssertTrue(tracker.needsStandUp)
         XCTAssertTrue(tracker.hasScreenSession)
-        XCTAssertTrue(tracker.isPossibleBreak)
+        XCTAssertTrue(tracker.isQuietScreenSession)
     }
 
     func testSnoozeSuppressesReminderWithoutResettingActiveTime() {
@@ -471,6 +455,7 @@ final class StandupTests: XCTestCase {
 
         XCTAssertTrue(readme.contains("Standup is local-only"))
         XCTAssertTrue(readme.contains("continuous screen-session time"))
+        XCTAssertTrue(readme.contains("keeps counting while the user session stays awake"))
         XCTAssertTrue(readme.contains("[SECURITY.md](SECURITY.md)"))
         XCTAssertTrue(readme.contains("[docs/security.md](docs/security.md)"))
         XCTAssertTrue(readme.contains("[CONTRIBUTING.md](CONTRIBUTING.md)"))

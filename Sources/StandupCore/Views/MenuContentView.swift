@@ -5,7 +5,6 @@ public struct MenuContentView: View {
     @ObservedObject var tracker: ActivityTracker
     @StateObject private var launchAtLogin = LaunchAtLoginController()
     @AppStorage("standup.targetActiveSeconds") private var selectedTargetActiveSeconds = StandupTimingOptions.defaultTargetActiveSeconds
-    @AppStorage("standup.breakThresholdSeconds") private var selectedBreakThresholdSeconds = StandupTimingOptions.defaultBreakThresholdSeconds
 
     public init(tracker: ActivityTracker) {
         self.tracker = tracker
@@ -31,9 +30,6 @@ public struct MenuContentView: View {
         }
         .onChange(of: selectedTargetActiveSeconds) { targetActiveSeconds in
             applyTargetTime(targetActiveSeconds)
-        }
-        .onChange(of: selectedBreakThresholdSeconds) { breakThresholdSeconds in
-            applyBreakTime(breakThresholdSeconds)
         }
     }
 
@@ -72,7 +68,7 @@ public struct MenuContentView: View {
 
     private var progressSection: some View {
         HStack(spacing: 14) {
-            LiquidProgressRing(progress: progress, isIdle: shouldShowBreakProgress)
+            LiquidProgressRing(progress: progress)
 
             VStack(alignment: .leading, spacing: 5) {
                 Label(progressTitle, systemImage: progressIconName)
@@ -102,16 +98,6 @@ public struct MenuContentView: View {
                 selectedValue: tracker.targetActiveSeconds,
                 options: StandupTimingOptions.targetActiveSeconds,
                 onSelect: applyTargetTime
-            )
-
-            rowDivider
-
-            timingMenuRow(
-                title: "Break reset",
-                systemName: "clock",
-                selectedValue: tracker.breakThresholdSeconds,
-                options: StandupTimingOptions.breakThresholdSeconds,
-                onSelect: applyBreakTime
             )
         }
     }
@@ -175,82 +161,55 @@ public struct MenuContentView: View {
             .overlay(Rectangle().fill(.black.opacity(0.04)).offset(y: 1))
     }
 
-    private var rowDivider: some View {
-        Rectangle()
-            .fill(.white.opacity(0.24))
-            .frame(height: 1)
-            .padding(.leading, CGFloat(MenuDesignMetrics.iconTileSize) + 10)
-    }
-
     private var statusColor: Color {
-        shouldShowBreakProgress ? .orange : .green
+        tracker.hasScreenSession ? .green : .orange
     }
 
     private var statusIconName: String {
-        if tracker.isPossibleBreak {
+        if tracker.isQuietScreenSession {
             return "display"
         }
 
-        return tracker.isIdle ? "cup.and.saucer.fill" : "figure.stand"
+        return tracker.hasScreenSession ? "figure.stand" : "clock.fill"
     }
 
     private var statusLabel: String {
-        if tracker.isPossibleBreak {
+        if tracker.hasScreenSession {
             return "Screen"
         }
 
-        return tracker.isIdle ? "Idle" : "Active"
+        return "Ready"
     }
 
     private var statusDetail: String {
-        shouldShowBreakProgress ? "Waiting for activity" : "Screen time is counting"
+        "Screen time is counting"
     }
 
     private var displayTime: String {
-        shouldShowBreakProgress ? formatTime(breakRemainingSeconds) : formatTime(tracker.activeSeconds)
+        formatTime(tracker.activeSeconds)
     }
 
     private var progress: Double {
-        let total = shouldShowBreakProgress ? tracker.breakThresholdSeconds : tracker.targetActiveSeconds
-        let elapsed = shouldShowBreakProgress ? tracker.idleSeconds : tracker.activeSeconds
+        let total = tracker.targetActiveSeconds
+        let elapsed = tracker.activeSeconds
         guard total > 0 else { return 0 }
         return min(max(Double(elapsed / total), 0), 1)
     }
 
-    private var shouldShowBreakProgress: Bool {
-        tracker.isIdle && !tracker.hasScreenSession
-    }
-
-    private var breakRemainingSeconds: TimeInterval {
-        max(0, tracker.breakThresholdSeconds - tracker.idleSeconds)
-    }
-
     private var progressTitle: String {
-        if tracker.hasScreenSession {
-            return "Screen"
-        }
-
-        return tracker.isIdle ? "Break" : "Focus"
+        "Screen"
     }
 
     private var progressIconName: String {
-        if tracker.hasScreenSession {
-            return "display"
-        }
-
-        return tracker.isIdle ? "clock.fill" : "timer"
+        "display"
     }
 
     private var progressDetail: String {
-        if tracker.isPossibleBreak {
-            return "Break reset in \(formatTime(breakRemainingSeconds))"
+        if tracker.isQuietScreenSession {
+            return "Quiet input; screen time still counts"
         }
 
-        if tracker.hasScreenSession || !tracker.isIdle {
-            return "Goal \(formatHourMinute(tracker.targetActiveSeconds))"
-        }
-
-        return "Reset at \(formatHourMinute(tracker.breakThresholdSeconds))"
+        return "Goal \(formatHourMinute(tracker.targetActiveSeconds))"
     }
 
     private var startAtLoginBinding: Binding<Bool> {
@@ -306,19 +265,12 @@ public struct MenuContentView: View {
 
     private func applyTimingSettings() {
         applyTargetTime(selectedTargetActiveSeconds)
-        applyBreakTime(selectedBreakThresholdSeconds)
     }
 
     private func applyTargetTime(_ seconds: TimeInterval) {
         let normalizedSeconds = StandupTimingOptions.normalizedTargetActiveSeconds(seconds)
         selectedTargetActiveSeconds = normalizedSeconds
         tracker.setTargetActiveSeconds(normalizedSeconds)
-    }
-
-    private func applyBreakTime(_ seconds: TimeInterval) {
-        let normalizedSeconds = StandupTimingOptions.normalizedBreakThresholdSeconds(seconds)
-        selectedBreakThresholdSeconds = normalizedSeconds
-        tracker.setBreakThresholdSeconds(normalizedSeconds)
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
@@ -516,7 +468,6 @@ private struct LiquidButtonStyle: ButtonStyle {
 
 private struct LiquidProgressRing: View {
     let progress: Double
-    let isIdle: Bool
 
     var body: some View {
         ZStack {
@@ -530,7 +481,7 @@ private struct LiquidProgressRing: View {
                     style: StrokeStyle(lineWidth: 7, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .shadow(color: progressColor.opacity(0.42), radius: 6, x: 0, y: 3)
+                .shadow(color: Color.green.opacity(0.42), radius: 6, x: 0, y: 3)
                 .animation(.easeInOut(duration: 0.24), value: progress)
         }
         .frame(
@@ -539,16 +490,8 @@ private struct LiquidProgressRing: View {
         )
     }
 
-    private var progressColor: Color {
-        isIdle ? .orange : .green
-    }
-
     private var progressGradient: LinearGradient {
-        if isIdle {
-            return LinearGradient(colors: [.orange, .yellow], startPoint: .top, endPoint: .bottom)
-        }
-
-        return LinearGradient(colors: [.green, .mint], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: [.green, .mint], startPoint: .top, endPoint: .bottom)
     }
 }
 

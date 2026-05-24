@@ -13,14 +13,13 @@ public class ActivityTracker: ObservableObject {
     @Published public private(set) var snoozeUntil: Date?
     
     @Published public var targetActiveSeconds: TimeInterval = StandupTimingOptions.defaultTargetActiveSeconds
-    @Published public var breakThresholdSeconds: TimeInterval = StandupTimingOptions.defaultBreakThresholdSeconds
     public var idleThresholdSeconds: TimeInterval = 60
 
     public var hasScreenSession: Bool {
         activeSeconds > 0 || needsStandUp || snoozeUntil != nil
     }
 
-    public var isPossibleBreak: Bool {
+    public var isQuietScreenSession: Bool {
         isIdle && hasScreenSession
     }
     
@@ -117,10 +116,6 @@ public class ActivityTracker: ObservableObject {
     public func setTargetActiveSeconds(_ seconds: TimeInterval) {
         targetActiveSeconds = StandupTimingOptions.normalizedTargetActiveSeconds(seconds)
     }
-
-    public func setBreakThresholdSeconds(_ seconds: TimeInterval) {
-        breakThresholdSeconds = StandupTimingOptions.normalizedBreakThresholdSeconds(seconds)
-    }
     
     private func setupNotifications() {
         let nc = NSWorkspace.shared.notificationCenter
@@ -138,27 +133,19 @@ public class ActivityTracker: ObservableObject {
     public func tick() {
         let systemIdle = systemIdleTimeProvider() ?? 0
 
-        let hasActivitySignal = systemIdle < idleThresholdSeconds || displaySleepAssertionProvider()
+        let hasRecentInteraction = systemIdle < idleThresholdSeconds || displaySleepAssertionProvider()
 
-        if hasActivitySignal {
-            activeSeconds += 1
+        activeSeconds += 1
+
+        if hasRecentInteraction {
             idleSeconds = 0
             isIdle = false
-            updateReminderStateIfNeeded()
         } else {
             isIdle = true
             idleSeconds += 1
-
-            if idleSeconds >= breakThresholdSeconds {
-                reset()
-                return
-            }
-
-            if hasScreenSession {
-                activeSeconds += 1
-                updateReminderStateIfNeeded()
-            }
         }
+
+        updateReminderStateIfNeeded()
     }
 
     private func updateReminderStateIfNeeded() {

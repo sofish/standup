@@ -33,57 +33,57 @@ flowchart TD
 
 ## 2. State Machine Model
 
-The app tracks effective continuous sitting time by analyzing user physical activity combined with system power state assertions. Brief input silence starts a break countdown, but it does not stop active-time accumulation until the configured break-reset threshold is reached. This avoids undercounting time spent reading, thinking, watching, or otherwise sitting at the computer without constant keyboard or pointer input.
+The app treats awake screen-session time as the source of truth for continuous sitting time. Keyboard/pointer idle time is still observed, but only to label quiet input periods; it no longer resets or pauses the active session while the display and user session remain awake. This avoids missing reminders when the user is reading, watching, thinking, or otherwise sitting at the computer without constant keyboard or pointer input.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Inactive : App Launch
 
-    Inactive --> Active : Activity Detected (Inputs/Media)
+    Inactive --> Active : Awake Screen Tick
     note on Active
-        1. Accumulate ActiveTime
-        2. Reset BreakTimer
+        1. Accumulate ScreenTime
+        2. Clear QuietInput when input/media is recent
     end note
 
-    Active --> TemporarilyIdle : No Input (> 1 min)
-    note on TemporarilyIdle
-        1. Continue ActiveTime accumulation
-        2. Start BreakTimer accumulation
-        3. Treat as possible break only
+    Active --> QuietInput : No Input (> 1 min)
+    note on QuietInput
+        1. Continue ScreenTime accumulation
+        2. Track quiet input duration for status only
     end note
 
-    TemporarilyIdle --> Active : Activity Resumed (BreakTimer < 5 mins)
+    QuietInput --> Active : Input/Media Resumed
     note on Active
-        Clear BreakTimer and keep accumulated ActiveTime
+        Clear QuietInput and keep accumulated ScreenTime
     end note
 
-    TemporarilyIdle --> Inactive : BreakTimer >= 5 mins (Break Taken)
+    Active --> Inactive : Screen sleeps, session locks, or manual reset
+    QuietInput --> Inactive : Screen sleeps, session locks, or manual reset
     note on Inactive
-        Reset ActiveTime = 0
+        Reset ScreenTime = 0
     end note
 
-    Active --> ReminderTriggered : ActiveTime >= 1 hour
+    Active --> ReminderTriggered : ScreenTime >= target
+    QuietInput --> ReminderTriggered : ScreenTime >= target
     note on ReminderTriggered
         1. Enter needsStandUp state
         2. Loop menubar icon animation
     end note
     
-    ReminderTriggered --> Inactive : User takes a break (BreakTimer >= 5 mins) or manual reset
+    ReminderTriggered --> Inactive : Screen sleeps, session locks, manual reset, or overlay auto-reset
     ReminderTriggered --> Active : User snoozes reminder (30 min/45 min/1 hour/2 hours)
     Active --> ReminderTriggered : Snooze expires while still over target
 ```
 
 The state is represented by these published fields in `ActivityTracker`:
 
-- `activeSeconds`: accumulated continuous sitting session time. It continues through short no-input periods until the full break threshold is reached.
-- `idleSeconds`: elapsed possible-break time after the idle threshold is crossed.
-- `isIdle`: whether the app is currently counting toward a possible break reset.
+- `activeSeconds`: accumulated continuous awake screen-session time. It continues through no-input periods until the screen sleeps, the session locks, or the user resets.
+- `idleSeconds`: elapsed quiet-input time after the idle threshold is crossed.
+- `isIdle`: whether the app is currently in a quiet-input period.
 - `hasScreenSession`: whether a continuous screen session has started and should keep accumulating sitting time.
-- `isPossibleBreak`: whether the user is currently quiet enough to count toward break reset while the screen session still accumulates.
+- `isQuietScreenSession`: whether the user has been quiet at the keyboard/pointer while screen time still accumulates.
 - `needsStandUp`: whether the active-time target has been reached and the menubar icon should animate.
 - `snoozeUntil`: optional deadline used to hide the overlay and suppress reminders without resetting active time.
 - `targetActiveSeconds`: selected active-time goal before the reminder appears.
-- `breakThresholdSeconds`: selected idle/break duration required to reset the session.
 
 ---
 
@@ -117,7 +117,7 @@ func getSystemIdleTime() -> Double? {
 ```
 
 ### Video Playback & Meetings Detection (`IOPMCopyAssertionsStatus`)
-Queries IOKit power management assertions directly to prevent false idle detection when the user is watching videos, presenting, or in meetings:
+Queries IOKit power management assertions directly so videos, presentations, and meetings stay classified as active screen time rather than quiet input:
 ```swift
 import IOKit.pwr_mgt
 
@@ -140,7 +140,7 @@ func hasDisplaySleepAssertion() -> Bool {
 ```
 
 ### Lock Screen & Display Sleep
-Subscribes to `NSWorkspace` notifications to trigger immediate idle resets when the user locks their screen or the display sleeps:
+Subscribes to `NSWorkspace` notifications to reset the screen session when the user locks their screen or the display sleeps:
 - `NSWorkspace.screensDidSleepNotification`
 - `NSWorkspace.sessionDidResignActiveNotification`
 
@@ -152,12 +152,12 @@ The `MenuBarExtra` label renders `AnimatedMenuBarIcon(tracker:)` plus a compact 
 
 - Active and not reminding: show the seated-cat-at-desk glyph and the active minute count.
 - `needsStandUp`: blink a small mint sparkle by using the existing 0.12-second animation clock. Runtime crossfade is intentionally disabled to avoid menu-bar shimmer.
-- Possible break during a screen session: keep showing the active minute count, keep the focus ring green, and show the break-reset countdown only as secondary detail.
-- Idle before a screen session starts: show an orange clock/break indicator.
+- Quiet input during a screen session: keep showing the active minute count and keep the focus ring green because screen time is still counting.
+- Before the first screen-session tick: show an orange ready indicator.
 
 The larger overlay animation uses 16 generated filled-silhouette transparent 128x128 template PNG frames with extra padding so the sitting chair pose stays inside the bounds. The Finder and `/Applications` icon uses `Resources/AppIcon.icns`, generated from a 1024x1024 liquid-glass source icon with a seated-to-standing figure and a green-to-mint accent.
 
-The menu content is backed by the same `ActivityTracker` instance, so manual reset and automatic break reset both clear `needsStandUp` and return the icon to the non-reminding state. `MenuContentView` relies on the native menu window material as the only panel and adds no custom rounded background inside it; content is separated with clearer crystal row dividers, green-to-mint inline icon tiles matching the focus ring, lightweight value controls, a custom switch, and pill buttons. The menu exposes target-time and break-reset menus backed by `StandupTimingOptions`; selected values are persisted with `AppStorage` and applied to `ActivityTracker` immediately via explicit setter methods. The menu also exposes a **Start at Login** toggle backed by `LaunchAtLoginController`, which registers or unregisters the app with `SMAppService.mainApp` and keeps the UI state aligned with the system service status after success or failure.
+The menu content is backed by the same `ActivityTracker` instance, so manual reset, screen sleep, and session lock all clear `needsStandUp` and return the icon to the non-reminding state. `MenuContentView` relies on the native menu window material as the only panel and adds no custom rounded background inside it; content is separated with clearer crystal row dividers, green-to-mint inline icon tiles matching the focus ring, lightweight value controls, a custom switch, and pill buttons. The menu exposes a target-time menu backed by `StandupTimingOptions`; the selected value is persisted with `AppStorage` and applied to `ActivityTracker` immediately via an explicit setter method. The menu also exposes a **Start at Login** toggle backed by `LaunchAtLoginController`, which registers or unregisters the app with `SMAppService.mainApp` and keeps the UI state aligned with the system service status after success or failure.
 
 When `needsStandUp` becomes true, `ReminderOverlayController` opens a borderless full-screen overlay on the main display. The overlay uses a glass material background with a light tint instead of an opaque scrim, shows a larger animated stand-up icon, a 5-minute countdown backed by `ReminderOverlayCountdown`, a **Reset** button, and a bottom-centered **Remind me later** control with clear glass buttons for 30 min, 45 min, 1 hour, and 2 hours. Pressing **Reset**, pressing Escape, or letting the countdown reach zero calls `ActivityTracker.reset()`, closes the overlay, and plays one system beep. Snooze calls `ActivityTracker.snoozeReminder(for:)`, closes the overlay without a beep, keeps active time intact, and allows the reminder to return after the selected deadline if the user is still over the target.
 

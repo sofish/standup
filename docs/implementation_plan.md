@@ -52,22 +52,19 @@ The repository is prepared for open-source publication with these root policy fi
 
 - `@Published public var needsStandUp: Bool = false` tracks whether the active time target has been reached.
 - `@Published public private(set) var snoozeUntil` stores the optional snooze deadline used to suppress reminders without resetting active time.
-- `@Published public var targetActiveSeconds` and `@Published public var breakThresholdSeconds` hold the selected reminder and break-reset durations. `setTargetActiveSeconds(_:)` and `setBreakThresholdSeconds(_:)` normalize menu selections and apply them immediately to the tracker.
-- `hasScreenSession` and `isPossibleBreak` distinguish a real screen session from an idle-at-launch state so browsing or reading continues to display as screen time.
-- In `tick()`, recent keyboard/pointer input or a display-sleep assertion clears `idleSeconds` and increments `activeSeconds`.
-- When keyboard/pointer input is quiet past `idleThresholdSeconds`, the tracker starts a possible-break countdown by incrementing `idleSeconds`, but it still increments `activeSeconds` until `idleSeconds >= breakThresholdSeconds`. This keeps reading, thinking, and other short no-input periods from undercounting the sitting session.
+- `@Published public var targetActiveSeconds` holds the selected reminder duration. `setTargetActiveSeconds(_:)` normalizes menu selections and applies them immediately to the tracker.
+- `hasScreenSession` and `isQuietScreenSession` distinguish awake screen time from quiet keyboard/pointer periods so browsing, reading, watching, and thinking continue to count as screen time.
+- In `tick()`, the tracker increments `activeSeconds` for each awake screen-session tick. Recent keyboard/pointer input or a display-sleep assertion clears `idleSeconds`; quiet input increments `idleSeconds` for status only.
+- Keyboard/pointer silence no longer resets active time. The app resets when macOS reports screen sleep, the user session resigns active, the user manually resets, or the reminder overlay auto-reset completes.
 - When `activeSeconds >= targetActiveSeconds`, the tracker sets `needsStandUp = true` and triggers the notification once unless `snoozeUntil` is still in the future. It does not call `reset()` immediately.
 - `snoozeReminder(for:)` accepts the supported snooze durations, hides the reminder, keeps `activeSeconds` intact, and lets the reminder return after the deadline if the user is still active.
 - In `reset()`, the tracker clears `needsStandUp` and `snoozeUntil` along with the active and idle timers.
-- The session is reset either:
-  1. Automatically when possible-break time reaches `breakThresholdSeconds` (e.g., they went for a break).
-  2. Manually when the user clicks "Reset Session".
+- The session is reset by screen sleep, session lock/resign, the overlay reset path, or the user clicking "Reset Session".
 
 [`StandupTimingOptions.swift`](../Sources/StandupCore/StandupTimingOptions.swift) defines the selectable timing values:
 
 - Target reminder: 15m, 30m, 45m, 1h, 1h 30m, 2h.
-- Break reset: 1m, 3m, 5m, 10m, 15m.
-- Unsupported stored values normalize back to the 1h target and 5m break defaults.
+- Unsupported stored values normalize back to the 1h target default.
 
 [`ReminderSnoozeOptions.swift`](../Sources/StandupCore/ReminderSnoozeOptions.swift) defines overlay snooze durations: 30 min, 45 min, 1 hour, and 2 hours. Unsupported snooze requests normalize to 30 min.
 
@@ -77,14 +74,14 @@ The repository is prepared for open-source publication with these root policy fi
 
 - Working/Active: static seated-cat-at-desk glyph plus the active minute count.
 - Reminding/needsStandUp: blinks a small mint sparkle on late animation frames so the stand-up moment reads longer.
-- Possible break during screen time: static seated-cat-at-desk glyph plus the active minute count, while the dropdown shows the break-reset countdown as secondary detail.
-- Idle before screen time starts: static seated-cat-at-desk glyph with an orange clock indicator in the menubar label.
+- Quiet input during screen time: static seated-cat-at-desk glyph plus the active minute count because screen time is still counting.
+- Before the first screen-session tick: static seated-cat-at-desk glyph with an orange ready indicator in the menubar label.
 
 The generated 16-frame PNG sequence remains available through `AnimatedStandupIcon` for the larger reminder overlay, where the bitmap detail has enough room to read clearly.
 
 [`StandupApp.swift`](../Sources/Standup/StandupApp.swift) uses `AnimatedMenuBarIcon(tracker: tracker)` in the `MenuBarExtra` label.
 
-[`MenuContentView.swift`](../Sources/StandupCore/Views/MenuContentView.swift) relies on the native menu window material as the only panel and does not draw a custom rounded background inside it. The menu uses clearer crystal row dividers, green-to-mint inline icon tiles that match the focus ring, lightweight target/break value controls, a custom switch, and pill action buttons. During a screen session, the main time display and progress ring continue to show screen time even when the user is temporarily quiet; the possible break countdown appears only as secondary text. The selections are persisted with `AppStorage`, applied to `ActivityTracker` on menu open, and applied immediately when changed.
+[`MenuContentView.swift`](../Sources/StandupCore/Views/MenuContentView.swift) relies on the native menu window material as the only panel and does not draw a custom rounded background inside it. The menu uses clearer crystal row dividers, green-to-mint inline icon tiles that match the focus ring, a lightweight target value control, a custom switch, and pill buttons. During a screen session, the main time display and progress ring continue to show screen time even when the user is temporarily quiet; quiet input appears only as secondary status text. The target selection is persisted with `AppStorage`, applied to `ActivityTracker` on menu open, and applied immediately when changed.
 
 [`MenuDesignMetrics.swift`](../Sources/StandupCore/MenuDesignMetrics.swift) keeps the dropdown proportions and glass clarity centralized: 268-point width, 20-point controls, 30-point icon space, a compact 82-point progress ring, and opacity constants for the crystal controls and icon tiles.
 
@@ -94,7 +91,7 @@ The generated 16-frame PNG sequence remains available through `AnimatedStandupIc
 
 ### Tests
 
-[`StandupTests.swift`](../Tests/StandupTests/StandupTests.swift) covers the activity state machine, possible-break accrual behavior, screen-session state, media assertion handling, target-time reminder state, reset and snooze behavior, timing option normalization, menu bar icon sizing/animation timing, generated cat menubar and app icon resources, bundle metadata, dropdown design metrics, overlay countdown, bottom-centered clear snooze control metrics, Escape reset behavior, launch-at-login state handling, MIT license files, security reporting docs, open-source docs, `.gitignore`, and the current no-network source boundary.
+[`StandupTests.swift`](../Tests/StandupTests/StandupTests.swift) covers the activity state machine, quiet-input screen-time accrual, screen-session state, media assertion handling, target-time reminder state, reset and snooze behavior, timing option normalization, menu bar icon sizing/animation timing, generated cat menubar and app icon resources, bundle metadata, dropdown design metrics, overlay countdown, bottom-centered clear snooze control metrics, Escape reset behavior, launch-at-login state handling, MIT license files, security reporting docs, open-source docs, `.gitignore`, and the current no-network source boundary.
 
 ---
 
@@ -107,7 +104,7 @@ The generated 16-frame PNG sequence remains available through `AnimatedStandupIc
 1. Run `./build.sh` to compile and package `Standup.app`.
 2. Launch the app using `open build/Standup.app`.
 3. Verify that the sitting icon appears in the macOS menubar.
-4. Click on the menubar icon, change the target and break reset pickers, close and reopen the menu, and verify that the selected values persist.
+4. Click on the menubar icon, change the target picker, close and reopen the menu, and verify that the selected value persists.
 5. Click **Test Bell** to trigger the reminder (sets time to 2 seconds before target).
 6. Verify that:
    - System notification triggers.
