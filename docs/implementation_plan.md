@@ -53,11 +53,14 @@ The repository is prepared for open-source publication with these root policy fi
 - `@Published public var needsStandUp: Bool = false` tracks whether the active time target has been reached.
 - `@Published public private(set) var snoozeUntil` stores the optional snooze deadline used to suppress reminders without resetting active time.
 - `@Published public var targetActiveSeconds` and `@Published public var breakThresholdSeconds` hold the selected reminder and break-reset durations. `setTargetActiveSeconds(_:)` and `setBreakThresholdSeconds(_:)` normalize menu selections and apply them immediately to the tracker.
-- In `tick()`, when `activeSeconds >= targetActiveSeconds`, the tracker sets `needsStandUp = true` and triggers the notification once unless `snoozeUntil` is still in the future. It does not call `reset()` immediately.
+- `hasScreenSession` and `isPossibleBreak` distinguish a real screen session from an idle-at-launch state so browsing or reading continues to display as screen time.
+- In `tick()`, recent keyboard/pointer input or a display-sleep assertion clears `idleSeconds` and increments `activeSeconds`.
+- When keyboard/pointer input is quiet past `idleThresholdSeconds`, the tracker starts a possible-break countdown by incrementing `idleSeconds`, but it still increments `activeSeconds` until `idleSeconds >= breakThresholdSeconds`. This keeps reading, thinking, and other short no-input periods from undercounting the sitting session.
+- When `activeSeconds >= targetActiveSeconds`, the tracker sets `needsStandUp = true` and triggers the notification once unless `snoozeUntil` is still in the future. It does not call `reset()` immediately.
 - `snoozeReminder(for:)` accepts the supported snooze durations, hides the reminder, keeps `activeSeconds` intact, and lets the reminder return after the deadline if the user is still active.
 - In `reset()`, the tracker clears `needsStandUp` and `snoozeUntil` along with the active and idle timers.
 - The session is reset either:
-  1. Automatically when the user is idle for `breakThresholdSeconds` (e.g., they went for a break).
+  1. Automatically when possible-break time reaches `breakThresholdSeconds` (e.g., they went for a break).
   2. Manually when the user clicks "Reset Session".
 
 [`StandupTimingOptions.swift`](../Sources/StandupCore/StandupTimingOptions.swift) defines the selectable timing values:
@@ -74,13 +77,14 @@ The repository is prepared for open-source publication with these root policy fi
 
 - Working/Active: static seated-cat-at-desk glyph plus the active minute count.
 - Reminding/needsStandUp: blinks a small mint sparkle on late animation frames so the stand-up moment reads longer.
-- Idle/Taking a break: static seated-cat-at-desk glyph with an orange clock indicator in the menubar label.
+- Possible break during screen time: static seated-cat-at-desk glyph plus the active minute count, while the dropdown shows the break-reset countdown as secondary detail.
+- Idle before screen time starts: static seated-cat-at-desk glyph with an orange clock indicator in the menubar label.
 
 The generated 16-frame PNG sequence remains available through `AnimatedStandupIcon` for the larger reminder overlay, where the bitmap detail has enough room to read clearly.
 
 [`StandupApp.swift`](../Sources/Standup/StandupApp.swift) uses `AnimatedMenuBarIcon(tracker: tracker)` in the `MenuBarExtra` label.
 
-[`MenuContentView.swift`](../Sources/StandupCore/Views/MenuContentView.swift) relies on the native menu window material as the only panel and does not draw a custom rounded background inside it. The menu uses clearer crystal row dividers, green-to-mint inline icon tiles that match the focus ring, lightweight target/break value controls, a custom switch, and pill action buttons. The selections are persisted with `AppStorage`, applied to `ActivityTracker` on menu open, and applied immediately when changed.
+[`MenuContentView.swift`](../Sources/StandupCore/Views/MenuContentView.swift) relies on the native menu window material as the only panel and does not draw a custom rounded background inside it. The menu uses clearer crystal row dividers, green-to-mint inline icon tiles that match the focus ring, lightweight target/break value controls, a custom switch, and pill action buttons. During a screen session, the main time display and progress ring continue to show screen time even when the user is temporarily quiet; the possible break countdown appears only as secondary text. The selections are persisted with `AppStorage`, applied to `ActivityTracker` on menu open, and applied immediately when changed.
 
 [`MenuDesignMetrics.swift`](../Sources/StandupCore/MenuDesignMetrics.swift) keeps the dropdown proportions and glass clarity centralized: 268-point width, 20-point controls, 30-point icon space, a compact 82-point progress ring, and opacity constants for the crystal controls and icon tiles.
 
@@ -90,7 +94,7 @@ The generated 16-frame PNG sequence remains available through `AnimatedStandupIc
 
 ### Tests
 
-[`StandupTests.swift`](../Tests/StandupTests/StandupTests.swift) covers the activity state machine, media assertion handling, target-time reminder state, reset and snooze behavior, timing option normalization, menu bar icon sizing/animation timing, generated cat menubar and app icon resources, bundle metadata, dropdown design metrics, overlay countdown, bottom-centered clear snooze control metrics, Escape reset behavior, launch-at-login state handling, MIT license files, security reporting docs, open-source docs, `.gitignore`, and the current no-network source boundary.
+[`StandupTests.swift`](../Tests/StandupTests/StandupTests.swift) covers the activity state machine, possible-break accrual behavior, screen-session state, media assertion handling, target-time reminder state, reset and snooze behavior, timing option normalization, menu bar icon sizing/animation timing, generated cat menubar and app icon resources, bundle metadata, dropdown design metrics, overlay countdown, bottom-centered clear snooze control metrics, Escape reset behavior, launch-at-login state handling, MIT license files, security reporting docs, open-source docs, `.gitignore`, and the current no-network source boundary.
 
 ---
 

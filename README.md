@@ -1,12 +1,12 @@
 # Standup
 
-Standup is a native macOS menu bar app that reminds you to stand up after a configurable focus period. It tracks effective active time locally, pauses accumulation during breaks, and shows a full-screen glass reminder overlay when the target is reached.
+Standup is a native macOS menu bar app that reminds you to stand up after a configurable focus period. It tracks continuous screen-session time locally, resets after a real break, and shows a full-screen glass reminder overlay when the target is reached.
 
 ## Features
 
 - Native SwiftUI menu bar app with no external runtime dependency.
 - Configurable focus target and break-reset duration.
-- Local activity tracking via macOS idle time and display-sleep assertions.
+- Local screen-session tracking via macOS idle time and display-sleep assertions.
 - Full-screen reminder overlay with reset, Escape reset, auto-reset countdown, and later reminders.
 - Optional Start at Login support through macOS login item APIs.
 

@@ -11,16 +11,16 @@ Standup is prepared for open-source publication under the MIT License.
 - `.gitignore`: excludes SwiftPM and local app build outputs.
 - `docs/security.md`: implementation-level security model and release checklist.
 
-## Pre-Publication Checklist
+## Release Checklist
 
-Before pushing to a public repository:
+Before publishing a tagged release:
 
-1. Decide whether the MIT copyright holder should remain `Standup contributors` or be changed to a person or organization.
-2. Confirm generated image and icon assets can be redistributed in an open-source repository.
-3. Enable GitHub Security Advisories or publish a private security contact.
-4. Run `swift test`.
-5. Run `./build.sh`.
-6. Confirm `.build/`, `build/`, and local `.app` bundles are ignored.
+1. Confirm generated image and icon assets can be redistributed in an open-source repository.
+2. Enable GitHub Security Advisories or publish a private security contact.
+3. Run `swift test`.
+4. Run `./build.sh`.
+5. Confirm `.build/`, `build/`, local `.app` bundles, and release zip files are not staged.
+6. State signing and notarization status in GitHub release notes.
 
 ## Ongoing Maintenance Rules
 

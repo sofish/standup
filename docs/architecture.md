@@ -33,7 +33,7 @@ flowchart TD
 
 ## 2. State Machine Model
 
-The app tracks effective active working time by analyzing user physical activity combined with system power state assertions, which prevents false idle detection during video playback, presentations, or calls.
+The app tracks effective continuous sitting time by analyzing user physical activity combined with system power state assertions. Brief input silence starts a break countdown, but it does not stop active-time accumulation until the configured break-reset threshold is reached. This avoids undercounting time spent reading, thinking, watching, or otherwise sitting at the computer without constant keyboard or pointer input.
 
 ```mermaid
 stateDiagram-v2
@@ -47,13 +47,14 @@ stateDiagram-v2
 
     Active --> TemporarilyIdle : No Input (> 1 min)
     note on TemporarilyIdle
-        1. Pause ActiveTime accumulation
+        1. Continue ActiveTime accumulation
         2. Start BreakTimer accumulation
+        3. Treat as possible break only
     end note
 
     TemporarilyIdle --> Active : Activity Resumed (BreakTimer < 5 mins)
     note on Active
-        Continue accumulating ActiveTime (no reset)
+        Clear BreakTimer and keep accumulated ActiveTime
     end note
 
     TemporarilyIdle --> Inactive : BreakTimer >= 5 mins (Break Taken)
@@ -74,9 +75,11 @@ stateDiagram-v2
 
 The state is represented by these published fields in `ActivityTracker`:
 
-- `activeSeconds`: accumulated active session time.
-- `idleSeconds`: elapsed idle/break time after the idle threshold is crossed.
-- `isIdle`: whether the app is currently counting toward a break reset.
+- `activeSeconds`: accumulated continuous sitting session time. It continues through short no-input periods until the full break threshold is reached.
+- `idleSeconds`: elapsed possible-break time after the idle threshold is crossed.
+- `isIdle`: whether the app is currently counting toward a possible break reset.
+- `hasScreenSession`: whether a continuous screen session has started and should keep accumulating sitting time.
+- `isPossibleBreak`: whether the user is currently quiet enough to count toward break reset while the screen session still accumulates.
 - `needsStandUp`: whether the active-time target has been reached and the menubar icon should animate.
 - `snoozeUntil`: optional deadline used to hide the overlay and suppress reminders without resetting active time.
 - `targetActiveSeconds`: selected active-time goal before the reminder appears.
@@ -149,7 +152,8 @@ The `MenuBarExtra` label renders `AnimatedMenuBarIcon(tracker:)` plus a compact 
 
 - Active and not reminding: show the seated-cat-at-desk glyph and the active minute count.
 - `needsStandUp`: blink a small mint sparkle by using the existing 0.12-second animation clock. Runtime crossfade is intentionally disabled to avoid menu-bar shimmer.
-- Idle/break countdown: show the seated-cat-at-desk glyph and an orange clock indicator.
+- Possible break during a screen session: keep showing the active minute count, keep the focus ring green, and show the break-reset countdown only as secondary detail.
+- Idle before a screen session starts: show an orange clock/break indicator.
 
 The larger overlay animation uses 16 generated filled-silhouette transparent 128x128 template PNG frames with extra padding so the sitting chair pose stays inside the bounds. The Finder and `/Applications` icon uses `Resources/AppIcon.icns`, generated from a 1024x1024 liquid-glass source icon with a seated-to-standing figure and a green-to-mint accent.
 

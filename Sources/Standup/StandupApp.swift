@@ -19,7 +19,7 @@ struct StandupApp: App {
             HStack(spacing: 4) {
                 AnimatedMenuBarIcon(tracker: tracker)
                 
-                if !tracker.isIdle {
+                if tracker.hasScreenSession || !tracker.isIdle {
                     Text(formatShortTime(tracker.activeSeconds))
                         .font(.system(.caption, design: .monospaced))
                 } else {

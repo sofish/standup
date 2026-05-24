@@ -2,12 +2,13 @@
 
 ## Supported Versions
 
-Until the project publishes tagged releases, only the current default branch or current source snapshot is supported for security fixes. After public releases begin, this table should be updated with the actively supported release lines.
+Only the latest tagged release line and the current default branch are supported for security fixes. Older development snapshots and superseded release tags are not supported.
 
 | Version | Supported |
 | --- | --- |
-| Current source | Yes |
-| Older untagged builds | No |
+| 1.0.x | Yes |
+| Current default branch | Yes |
+| Older untagged builds and superseded tags | No |
 
 ## Reporting A Vulnerability
 

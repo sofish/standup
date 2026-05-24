@@ -39,3 +39,5 @@ Before publishing a public release:
 4. Confirm generated image assets have acceptable provenance for open-source distribution.
 5. Enable GitHub Security Advisories or provide another private vulnerability reporting channel.
 6. Sign and notarize public binary builds if distributing prebuilt apps.
+
+Current public release packages are ad-hoc signed development zip archives, not Developer ID signed or notarized. Release notes must state this status so users understand the macOS Gatekeeper tradeoff before downloading.

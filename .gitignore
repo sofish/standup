@@ -3,6 +3,7 @@
 .build/
 build/
 *.app
+*.zip
 *.dSYM
 *.xcuserstate
 xcuserdata/

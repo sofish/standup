@@ -39,7 +39,7 @@ public struct MenuContentView: View {
 
     private var header: some View {
         HStack(spacing: 11) {
-            LiquidIcon(systemName: tracker.isIdle ? "cup.and.saucer.fill" : "figure.stand")
+            LiquidIcon(systemName: statusIconName)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Standup")
@@ -60,7 +60,7 @@ public struct MenuContentView: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 7, height: 7)
-            Text(tracker.isIdle ? "Idle" : "Active")
+            Text(statusLabel)
                 .font(.caption)
                 .fontWeight(.semibold)
         }
@@ -72,10 +72,10 @@ public struct MenuContentView: View {
 
     private var progressSection: some View {
         HStack(spacing: 14) {
-            LiquidProgressRing(progress: progress, isIdle: tracker.isIdle)
+            LiquidProgressRing(progress: progress, isIdle: shouldShowBreakProgress)
 
             VStack(alignment: .leading, spacing: 5) {
-                Label(tracker.isIdle ? "Break" : "Focus", systemImage: tracker.isIdle ? "clock.fill" : "timer")
+                Label(progressTitle, systemImage: progressIconName)
                     .font(.caption2)
                     .fontWeight(.semibold)
                     .foregroundColor(statusColor)
@@ -85,7 +85,7 @@ public struct MenuContentView: View {
                     .monospacedDigit()
                     .foregroundStyle(.primary)
 
-                Text(tracker.isIdle ? "Reset at \(formatHourMinute(tracker.breakThresholdSeconds))" : "Goal \(formatHourMinute(tracker.targetActiveSeconds))")
+                Text(progressDetail)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -183,26 +183,74 @@ public struct MenuContentView: View {
     }
 
     private var statusColor: Color {
-        tracker.isIdle ? .orange : .green
+        shouldShowBreakProgress ? .orange : .green
+    }
+
+    private var statusIconName: String {
+        if tracker.isPossibleBreak {
+            return "display"
+        }
+
+        return tracker.isIdle ? "cup.and.saucer.fill" : "figure.stand"
+    }
+
+    private var statusLabel: String {
+        if tracker.isPossibleBreak {
+            return "Screen"
+        }
+
+        return tracker.isIdle ? "Idle" : "Active"
     }
 
     private var statusDetail: String {
-        tracker.isIdle ? "Break timer is running" : "Active time is counting"
+        shouldShowBreakProgress ? "Waiting for activity" : "Screen time is counting"
     }
 
     private var displayTime: String {
-        if tracker.isIdle {
-            return formatTime(tracker.breakThresholdSeconds - tracker.idleSeconds)
-        }
-
-        return formatTime(tracker.activeSeconds)
+        shouldShowBreakProgress ? formatTime(breakRemainingSeconds) : formatTime(tracker.activeSeconds)
     }
 
     private var progress: Double {
-        let total = tracker.isIdle ? tracker.breakThresholdSeconds : tracker.targetActiveSeconds
-        let elapsed = tracker.isIdle ? tracker.idleSeconds : tracker.activeSeconds
+        let total = shouldShowBreakProgress ? tracker.breakThresholdSeconds : tracker.targetActiveSeconds
+        let elapsed = shouldShowBreakProgress ? tracker.idleSeconds : tracker.activeSeconds
         guard total > 0 else { return 0 }
         return min(max(Double(elapsed / total), 0), 1)
+    }
+
+    private var shouldShowBreakProgress: Bool {
+        tracker.isIdle && !tracker.hasScreenSession
+    }
+
+    private var breakRemainingSeconds: TimeInterval {
+        max(0, tracker.breakThresholdSeconds - tracker.idleSeconds)
+    }
+
+    private var progressTitle: String {
+        if tracker.hasScreenSession {
+            return "Screen"
+        }
+
+        return tracker.isIdle ? "Break" : "Focus"
+    }
+
+    private var progressIconName: String {
+        if tracker.hasScreenSession {
+            return "display"
+        }
+
+        return tracker.isIdle ? "clock.fill" : "timer"
+    }
+
+    private var progressDetail: String {
+        if tracker.isPossibleBreak {
+            return "Break reset in \(formatTime(breakRemainingSeconds))"
+        }
+
+        if tracker.hasScreenSession || !tracker.isIdle {
+            return "Goal \(formatHourMinute(tracker.targetActiveSeconds))"
+        }
+
+        return "Reset at \(formatHourMinute(tracker.breakThresholdSeconds))"
     }
 
     private var startAtLoginBinding: Binding<Bool> {

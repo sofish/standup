@@ -84,6 +84,10 @@ final class StandupTests: XCTestCase {
 
         XCTAssertTrue(buildScript.contains("<key>CFBundleIconFile</key>"))
         XCTAssertTrue(buildScript.contains("<string>AppIcon.icns</string>"))
+        XCTAssertTrue(buildScript.contains("<key>CFBundleShortVersionString</key>"))
+        XCTAssertTrue(buildScript.contains("<string>1.0.1</string>"))
+        XCTAssertTrue(buildScript.contains("<key>CFBundleVersion</key>"))
+        XCTAssertTrue(buildScript.contains("<string>2</string>"))
     }
 
     func testGeneratedAnimationUsesSequenceEndpoints() {
@@ -263,7 +267,7 @@ final class StandupTests: XCTestCase {
         XCTAssertFalse(tracker.isIdle)
     }
     
-    func testUserIdleStopsAccrualAndStartsCountdown() {
+    func testShortIdleKeepsAccruingActiveTimeWhileBreakCountdownRuns() {
         // Given
         let tracker = makeTracker(idleTime: 20.0)
         tracker.idleThresholdSeconds = 10
@@ -274,9 +278,25 @@ final class StandupTests: XCTestCase {
         tracker.tick()
         
         // Then
-        XCTAssertEqual(tracker.activeSeconds, 100) // Active time doesn't change
+        XCTAssertEqual(tracker.activeSeconds, 101)
         XCTAssertEqual(tracker.idleSeconds, 1)
         XCTAssertTrue(tracker.isIdle)
+        XCTAssertTrue(tracker.hasScreenSession)
+        XCTAssertTrue(tracker.isPossibleBreak)
+    }
+
+    func testIdleAtLaunchDoesNotStartActiveSession() {
+        let tracker = makeTracker(idleTime: 20.0)
+        tracker.idleThresholdSeconds = 10
+        tracker.breakThresholdSeconds = 30
+
+        tracker.tick()
+
+        XCTAssertEqual(tracker.activeSeconds, 0)
+        XCTAssertEqual(tracker.idleSeconds, 1)
+        XCTAssertTrue(tracker.isIdle)
+        XCTAssertFalse(tracker.hasScreenSession)
+        XCTAssertFalse(tracker.isPossibleBreak)
     }
     
     func testMediaPlaybackKeepsUserActive() {
@@ -292,6 +312,8 @@ final class StandupTests: XCTestCase {
         XCTAssertEqual(tracker.activeSeconds, 1)
         XCTAssertEqual(tracker.idleSeconds, 0)
         XCTAssertFalse(tracker.isIdle)
+        XCTAssertTrue(tracker.hasScreenSession)
+        XCTAssertFalse(tracker.isPossibleBreak)
     }
     
     func testLongBreakResetsActiveTime() {
@@ -303,12 +325,12 @@ final class StandupTests: XCTestCase {
         
         // When: Idle for 1 tick
         tracker.tick()
-        XCTAssertEqual(tracker.activeSeconds, 500)
+        XCTAssertEqual(tracker.activeSeconds, 501)
         XCTAssertEqual(tracker.idleSeconds, 1)
         
         // Idle for 2nd tick
         tracker.tick()
-        XCTAssertEqual(tracker.activeSeconds, 500)
+        XCTAssertEqual(tracker.activeSeconds, 502)
         XCTAssertEqual(tracker.idleSeconds, 2)
         
         // Idle for 3rd tick (reaches breakThresholdSeconds)
@@ -380,6 +402,23 @@ final class StandupTests: XCTestCase {
         XCTAssertEqual(tracker.activeSeconds, 6)
     }
 
+    func testShortIdleCanStillReachReminderTarget() {
+        let tracker = makeTracker(idleTime: 20.0)
+        tracker.idleThresholdSeconds = 10
+        tracker.breakThresholdSeconds = 30
+        tracker.targetActiveSeconds = 5
+        tracker.activeSeconds = 4
+
+        tracker.tick()
+
+        XCTAssertTrue(tracker.isIdle)
+        XCTAssertEqual(tracker.idleSeconds, 1)
+        XCTAssertEqual(tracker.activeSeconds, 5)
+        XCTAssertTrue(tracker.needsStandUp)
+        XCTAssertTrue(tracker.hasScreenSession)
+        XCTAssertTrue(tracker.isPossibleBreak)
+    }
+
     func testSnoozeSuppressesReminderWithoutResettingActiveTime() {
         // Given
         var currentDate = Date(timeIntervalSince1970: 1_000)
@@ -419,6 +458,7 @@ final class StandupTests: XCTestCase {
         XCTAssertTrue(security.contains("Please do not file public issues"))
         XCTAssertTrue(security.contains("No app network client"))
         XCTAssertTrue(security.contains("SMAppService.mainApp"))
+        XCTAssertTrue(security.contains("1.0.x"))
 
         let contributing = try projectFile("CONTRIBUTING.md")
         XCTAssertTrue(contributing.contains("swift test"))
@@ -430,6 +470,7 @@ final class StandupTests: XCTestCase {
         let readme = try projectFile("README.md")
 
         XCTAssertTrue(readme.contains("Standup is local-only"))
+        XCTAssertTrue(readme.contains("continuous screen-session time"))
         XCTAssertTrue(readme.contains("[SECURITY.md](SECURITY.md)"))
         XCTAssertTrue(readme.contains("[docs/security.md](docs/security.md)"))
         XCTAssertTrue(readme.contains("[CONTRIBUTING.md](CONTRIBUTING.md)"))
@@ -446,11 +487,13 @@ final class StandupTests: XCTestCase {
         XCTAssertTrue(securityDoc.contains("Local-Only Boundary"))
         XCTAssertTrue(securityDoc.contains("No app network client"))
         XCTAssertTrue(securityDoc.contains("Sign and notarize public binary builds"))
+        XCTAssertTrue(securityDoc.contains("ad-hoc signed development zip archives"))
 
         let gitignore = try projectFile(".gitignore")
         XCTAssertTrue(gitignore.contains(".build/"))
         XCTAssertTrue(gitignore.contains("build/"))
         XCTAssertTrue(gitignore.contains("*.app"))
+        XCTAssertTrue(gitignore.contains("*.zip"))
         XCTAssertTrue(gitignore.contains(".DS_Store"))
     }
 

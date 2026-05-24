@@ -15,6 +15,14 @@ public class ActivityTracker: ObservableObject {
     @Published public var targetActiveSeconds: TimeInterval = StandupTimingOptions.defaultTargetActiveSeconds
     @Published public var breakThresholdSeconds: TimeInterval = StandupTimingOptions.defaultBreakThresholdSeconds
     public var idleThresholdSeconds: TimeInterval = 60
+
+    public var hasScreenSession: Bool {
+        activeSeconds > 0 || needsStandUp || snoozeUntil != nil
+    }
+
+    public var isPossibleBreak: Bool {
+        isIdle && hasScreenSession
+    }
     
     private var timer: Timer?
     private var notificationObservers: [Any] = []
@@ -129,39 +137,40 @@ public class ActivityTracker: ObservableObject {
     
     public func tick() {
         let systemIdle = systemIdleTimeProvider() ?? 0
-        
-        // User is active if:
-        // 1. Physical input idle time is less than threshold
-        // OR
-        // 2. The system prevents display sleep (video/meeting active)
-        var userIsCurrentlyActive = systemIdle < idleThresholdSeconds
-        
-        if !userIsCurrentlyActive {
-            userIsCurrentlyActive = displaySleepAssertionProvider()
-        }
-        
-        if userIsCurrentlyActive {
+
+        let hasActivitySignal = systemIdle < idleThresholdSeconds || displaySleepAssertionProvider()
+
+        if hasActivitySignal {
             activeSeconds += 1
             idleSeconds = 0
             isIdle = false
-            
-            if activeSeconds >= targetActiveSeconds {
-                if isReminderSnoozed() {
-                    if needsStandUp {
-                        needsStandUp = false
-                    }
-                } else if !needsStandUp {
-                    needsStandUp = true
-                    triggerReminder()
-                }
-            }
+            updateReminderStateIfNeeded()
         } else {
             isIdle = true
             idleSeconds += 1
-            
+
             if idleSeconds >= breakThresholdSeconds {
                 reset()
+                return
             }
+
+            if hasScreenSession {
+                activeSeconds += 1
+                updateReminderStateIfNeeded()
+            }
+        }
+    }
+
+    private func updateReminderStateIfNeeded() {
+        guard activeSeconds >= targetActiveSeconds else { return }
+
+        if isReminderSnoozed() {
+            if needsStandUp {
+                needsStandUp = false
+            }
+        } else if !needsStandUp {
+            needsStandUp = true
+            triggerReminder()
         }
     }
 
