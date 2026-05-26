@@ -4,7 +4,7 @@ import StandupCore
 
 @main
 struct StandupApp: App {
-    @StateObject private var tracker = ActivityTracker()
+    @StateObject private var tracker = ActivityTracker(debugLog: LocalDebugLog.shared)
     private let reminderOverlayController = ReminderOverlayController()
     
     init() {

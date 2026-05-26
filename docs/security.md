@@ -20,14 +20,17 @@ If network behavior is added later, this document, `README.md`, and `SECURITY.md
 
 - IOKit `HIDIdleTime` reads elapsed time since physical keyboard or pointer input so the UI can distinguish recent input from quiet screen time.
 - `IOPMCopyAssertionsStatus` checks whether the system is preventing display sleep, which keeps videos, meetings, and presentations classified as active screen time.
-- `NSWorkspace` screen sleep and session notifications reset the current session when the display sleeps or the user session resigns active.
+- `NSWorkspace` screen sleep/session notifications and distributed screen lock/unlock notifications reset the current session when the display sleeps, the screen locks/unlocks, or the user session resigns active.
 - `UNUserNotificationCenter` requests notification permission and delivers stand-up reminders.
 - `SMAppService.mainApp` registers or unregisters Start at Login only when the user toggles that setting.
 - SwiftUI `AppStorage` stores the target timing preference in local user defaults.
+- `LocalDebugLog` writes diagnostic state-transition events to `~/Library/Logs/Standup/standup.log`.
 
 ## Data Handling
 
-The app does not collect, transmit, or persist detailed activity logs. It maintains the current session counters in memory and persists only the user-selected target timing setting through user defaults.
+The app does not collect, transmit, or persist detailed activity logs. It maintains the current session counters in memory, persists only the user-selected target timing setting through user defaults, and writes a small local diagnostic log for debugging reminder behavior.
+
+The debug log is local to the Mac, rotates at 512 KB, and records only app state transitions such as tracker start, quiet-input detection, target changes, snooze, reminder trigger, reset reason, lock state, and notification authorization or delivery failures. It does not record keyboard content, window titles, app names, documents, websites, screenshots, or network data.
 
 ## Release Security Checklist
 

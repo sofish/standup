@@ -56,8 +56,8 @@ stateDiagram-v2
         Clear QuietInput and keep accumulated ScreenTime
     end note
 
-    Active --> Inactive : Screen sleeps, session locks, or manual reset
-    QuietInput --> Inactive : Screen sleeps, session locks, or manual reset
+    Active --> Inactive : Screen sleeps, screen locks, session unlocks, or manual reset
+    QuietInput --> Inactive : Screen sleeps, screen locks, session unlocks, or manual reset
     note on Inactive
         Reset ScreenTime = 0
     end note
@@ -69,14 +69,14 @@ stateDiagram-v2
         2. Loop menubar icon animation
     end note
     
-    ReminderTriggered --> Inactive : Screen sleeps, session locks, manual reset, or overlay auto-reset
+    ReminderTriggered --> Inactive : Screen sleeps, screen locks/unlocks, manual reset, or overlay auto-reset
     ReminderTriggered --> Active : User snoozes reminder (30 min/45 min/1 hour/2 hours)
     Active --> ReminderTriggered : Snooze expires while still over target
 ```
 
 The state is represented by these published fields in `ActivityTracker`:
 
-- `activeSeconds`: accumulated continuous awake screen-session time. It continues through no-input periods until the screen sleeps, the session locks, or the user resets.
+- `activeSeconds`: accumulated continuous awake screen-session time. It continues through no-input periods until the screen sleeps, the screen locks or unlocks, or the user resets.
 - `idleSeconds`: elapsed quiet-input time after the idle threshold is crossed.
 - `isIdle`: whether the app is currently in a quiet-input period.
 - `hasScreenSession`: whether a continuous screen session has started and should keep accumulating sitting time.
@@ -84,6 +84,8 @@ The state is represented by these published fields in `ActivityTracker`:
 - `needsStandUp`: whether the active-time target has been reached and the menubar icon should animate.
 - `snoozeUntil`: optional deadline used to hide the overlay and suppress reminders without resetting active time.
 - `targetActiveSeconds`: selected active-time goal before the reminder appears.
+
+State transitions are also written to a small rotating local debug log at `~/Library/Logs/Standup/standup.log`. The log exists to debug missed or unexpected reminders after the fact and records counters/reasons only, not user content.
 
 ---
 
@@ -140,9 +142,11 @@ func hasDisplaySleepAssertion() -> Bool {
 ```
 
 ### Lock Screen & Display Sleep
-Subscribes to `NSWorkspace` notifications to reset the screen session when the user locks their screen or the display sleeps:
+Subscribes to `NSWorkspace` and distributed screen-lock notifications to reset the screen session when the user locks/unlocks their screen or the display sleeps:
 - `NSWorkspace.screensDidSleepNotification`
 - `NSWorkspace.sessionDidResignActiveNotification`
+- `com.apple.screenIsLocked`
+- `com.apple.screenIsUnlocked`
 
 ---
 
@@ -157,7 +161,7 @@ The `MenuBarExtra` label renders `AnimatedMenuBarIcon(tracker:)` plus a compact 
 
 The larger overlay animation uses 16 generated filled-silhouette transparent 128x128 template PNG frames with extra padding so the sitting chair pose stays inside the bounds. The Finder and `/Applications` icon uses `Resources/AppIcon.icns`, generated from a 1024x1024 liquid-glass source icon with a seated-to-standing figure and a green-to-mint accent.
 
-The menu content is backed by the same `ActivityTracker` instance, so manual reset, screen sleep, and session lock all clear `needsStandUp` and return the icon to the non-reminding state. `MenuContentView` relies on the native menu window material as the only panel and adds no custom rounded background inside it; content is separated with clearer crystal row dividers, green-to-mint inline icon tiles matching the focus ring, lightweight value controls, a custom switch, and pill buttons. The menu exposes a target-time menu backed by `StandupTimingOptions`; the selected value is persisted with `AppStorage` and applied to `ActivityTracker` immediately via an explicit setter method. The menu also exposes a **Start at Login** toggle backed by `LaunchAtLoginController`, which registers or unregisters the app with `SMAppService.mainApp` and keeps the UI state aligned with the system service status after success or failure.
+The menu content is backed by the same `ActivityTracker` instance, so manual reset, screen sleep, screen lock/unlock, and session resign all clear `needsStandUp` and return the icon to the non-reminding state. The same transitions are written to the local debug log for after-the-fact reminder debugging. `MenuContentView` relies on the native menu window material as the only panel and adds no custom rounded background inside it; content is separated with clearer crystal row dividers, green-to-mint inline icon tiles matching the focus ring, lightweight value controls, a custom switch, and pill buttons. The menu exposes a target-time menu backed by `StandupTimingOptions`; the selected value is persisted with `AppStorage` and applied to `ActivityTracker` immediately via an explicit setter method. The menu also exposes a **Start at Login** toggle backed by `LaunchAtLoginController`, which registers or unregisters the app with `SMAppService.mainApp` and keeps the UI state aligned with the system service status after success or failure.
 
 When `needsStandUp` becomes true, `ReminderOverlayController` opens a borderless full-screen overlay on the main display. The overlay uses a glass material background with a light tint instead of an opaque scrim, shows a larger animated stand-up icon, a 5-minute countdown backed by `ReminderOverlayCountdown`, a **Reset** button, and a bottom-centered **Remind me later** control with clear glass buttons for 30 min, 45 min, 1 hour, and 2 hours. Pressing **Reset**, pressing Escape, or letting the countdown reach zero calls `ActivityTracker.reset()`, closes the overlay, and plays one system beep. Snooze calls `ActivityTracker.snoozeReminder(for:)`, closes the overlay without a beep, keeps active time intact, and allows the reminder to return after the selected deadline if the user is still over the target.
 

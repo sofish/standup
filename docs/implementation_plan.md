@@ -55,11 +55,12 @@ The repository is prepared for open-source publication with these root policy fi
 - `@Published public var targetActiveSeconds` holds the selected reminder duration. `setTargetActiveSeconds(_:)` normalizes menu selections and applies them immediately to the tracker.
 - `hasScreenSession` and `isQuietScreenSession` distinguish awake screen time from quiet keyboard/pointer periods so browsing, reading, watching, and thinking continue to count as screen time.
 - In `tick()`, the tracker increments `activeSeconds` for each awake screen-session tick. Recent keyboard/pointer input or a display-sleep assertion clears `idleSeconds`; quiet input increments `idleSeconds` for status only.
-- Keyboard/pointer silence no longer resets active time. The app resets when macOS reports screen sleep, the user session resigns active, the user manually resets, or the reminder overlay auto-reset completes.
+- Keyboard/pointer silence no longer resets active time. The app resets when macOS reports screen sleep, screen lock, screen unlock, user-session resign, manual reset, or reminder overlay auto-reset.
 - When `activeSeconds >= targetActiveSeconds`, the tracker sets `needsStandUp = true` and triggers the notification once unless `snoozeUntil` is still in the future. It does not call `reset()` immediately.
 - `snoozeReminder(for:)` accepts the supported snooze durations, hides the reminder, keeps `activeSeconds` intact, and lets the reminder return after the deadline if the user is still active.
 - In `reset()`, the tracker clears `needsStandUp` and `snoozeUntil` along with the active and idle timers.
-- The session is reset by screen sleep, session lock/resign, the overlay reset path, or the user clicking "Reset Session".
+- The session is reset by screen sleep, screen lock/unlock, session resign, the overlay reset path, or the user clicking "Reset Session". Screen lock also pauses timer ticks while locked, and unlock resets defensively in case the lock notification was missed.
+- `LocalDebugLog` writes local-only diagnostic state transitions to `~/Library/Logs/Standup/standup.log` so reminder issues can be debugged after they happen. The log rotates at 512 KB and stores counters/state plus notification authorization or delivery failures only, not keyboard content, window titles, websites, or document names.
 
 [`StandupTimingOptions.swift`](../Sources/StandupCore/StandupTimingOptions.swift) defines the selectable timing values:
 
@@ -91,7 +92,7 @@ The generated 16-frame PNG sequence remains available through `AnimatedStandupIc
 
 ### Tests
 
-[`StandupTests.swift`](../Tests/StandupTests/StandupTests.swift) covers the activity state machine, quiet-input screen-time accrual, screen-session state, media assertion handling, target-time reminder state, reset and snooze behavior, timing option normalization, menu bar icon sizing/animation timing, generated cat menubar and app icon resources, bundle metadata, dropdown design metrics, overlay countdown, bottom-centered clear snooze control metrics, Escape reset behavior, launch-at-login state handling, MIT license files, security reporting docs, open-source docs, `.gitignore`, and the current no-network source boundary.
+[`StandupTests.swift`](../Tests/StandupTests/StandupTests.swift) covers the activity state machine, quiet-input screen-time accrual, screen-session state, media assertion handling, target-time reminder state, reset and snooze behavior, local debug-log writing and rotation, timing option normalization, menu bar icon sizing/animation timing, generated cat menubar and app icon resources, bundle metadata, dropdown design metrics, overlay countdown, bottom-centered clear snooze control metrics, Escape reset behavior, launch-at-login state handling, MIT license files, security reporting docs, open-source docs, `.gitignore`, and the current no-network source boundary.
 
 ---
 

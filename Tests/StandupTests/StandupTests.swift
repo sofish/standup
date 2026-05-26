@@ -85,9 +85,9 @@ final class StandupTests: XCTestCase {
         XCTAssertTrue(buildScript.contains("<key>CFBundleIconFile</key>"))
         XCTAssertTrue(buildScript.contains("<string>AppIcon.icns</string>"))
         XCTAssertTrue(buildScript.contains("<key>CFBundleShortVersionString</key>"))
-        XCTAssertTrue(buildScript.contains("<string>1.0.2</string>"))
+        XCTAssertTrue(buildScript.contains("<string>1.0.3</string>"))
         XCTAssertTrue(buildScript.contains("<key>CFBundleVersion</key>"))
-        XCTAssertTrue(buildScript.contains("<string>3</string>"))
+        XCTAssertTrue(buildScript.contains("<string>4</string>"))
     }
 
     func testGeneratedAnimationUsesSequenceEndpoints() {
@@ -367,6 +367,37 @@ final class StandupTests: XCTestCase {
         XCTAssertFalse(tracker.needsStandUp)
         XCTAssertNil(tracker.snoozeUntil)
     }
+
+    func testScreenLockResetsAndPausesTickCounting() {
+        let log = CapturingDebugLog()
+        let tracker = makeTracker(idleTime: 0.0, debugLog: log)
+        tracker.activeSeconds = 500
+        tracker.idleSeconds = 20
+        tracker.needsStandUp = true
+
+        tracker.handleScreenLocked()
+        tracker.tick()
+
+        XCTAssertEqual(tracker.activeSeconds, 0)
+        XCTAssertEqual(tracker.idleSeconds, 0)
+        XCTAssertFalse(tracker.needsStandUp)
+        XCTAssertTrue(log.messages.contains { $0.contains("reset reason=screen_locked") })
+        XCTAssertFalse(log.messages.contains { $0.contains("screen.progress") })
+    }
+
+    func testScreenUnlockResetsEvenIfLockNotificationWasMissed() {
+        let log = CapturingDebugLog()
+        let tracker = makeTracker(idleTime: 0.0, debugLog: log)
+        tracker.activeSeconds = 48 * 60
+        tracker.idleSeconds = 48 * 60
+
+        tracker.handleScreenUnlocked()
+
+        XCTAssertEqual(tracker.activeSeconds, 0)
+        XCTAssertEqual(tracker.idleSeconds, 0)
+        XCTAssertFalse(tracker.isIdle)
+        XCTAssertTrue(log.messages.contains { $0.contains("reset reason=screen_unlocked") })
+    }
     
     func testReachingTargetTimeTriggersRemindingState() {
         // Given
@@ -401,6 +432,48 @@ final class StandupTests: XCTestCase {
         XCTAssertTrue(tracker.needsStandUp)
         XCTAssertTrue(tracker.hasScreenSession)
         XCTAssertTrue(tracker.isQuietScreenSession)
+    }
+
+    func testActivityTrackerWritesLocalDebugEvents() {
+        let log = CapturingDebugLog()
+        let tracker = makeTracker(idleTime: 20.0, debugLog: log)
+        tracker.idleThresholdSeconds = 10
+        tracker.targetActiveSeconds = 2
+
+        tracker.tick()
+        tracker.tick()
+        tracker.reset()
+
+        XCTAssertTrue(log.messages.contains { $0.contains("tracker.started") })
+        XCTAssertTrue(log.messages.contains { $0.contains("screen.quiet") && $0.contains("active=1") && $0.contains("locked=false") })
+        XCTAssertTrue(log.messages.contains { $0.contains("reminder.triggered") && $0.contains("active=2") && $0.contains("locked=false") })
+        XCTAssertTrue(log.messages.contains { $0.contains("reset reason=manual") && $0.contains("active=2") && $0.contains("locked=false") })
+    }
+
+    func testLocalDebugLogWritesAndRotatesConfiguredFile() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("StandupDebugLogTests-\(UUID().uuidString)")
+        let fileURL = directory.appendingPathComponent("standup.log")
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        let log = LocalDebugLog(
+            fileURL: fileURL,
+            maxBytes: 20,
+            dateProvider: { Date(timeIntervalSince1970: 1_800_000_000) }
+        )
+
+        log.write("first entry")
+        log.write("second entry")
+
+        let rotatedURL = fileURL.deletingPathExtension().appendingPathExtension("log.1")
+        let currentContent = try String(contentsOf: fileURL, encoding: .utf8)
+        let rotatedContent = try String(contentsOf: rotatedURL, encoding: .utf8)
+
+        XCTAssertTrue(currentContent.contains("second entry"))
+        XCTAssertTrue(rotatedContent.contains("first entry"))
+        XCTAssertTrue(currentContent.contains("2027"))
     }
 
     func testSnoozeSuppressesReminderWithoutResettingActiveTime() {
@@ -471,6 +544,7 @@ final class StandupTests: XCTestCase {
         let securityDoc = try projectFile("docs/security.md")
         XCTAssertTrue(securityDoc.contains("Local-Only Boundary"))
         XCTAssertTrue(securityDoc.contains("No app network client"))
+        XCTAssertTrue(securityDoc.contains("standup.log"))
         XCTAssertTrue(securityDoc.contains("Sign and notarize public binary builds"))
         XCTAssertTrue(securityDoc.contains("ad-hoc signed development zip archives"))
 
@@ -511,13 +585,15 @@ final class StandupTests: XCTestCase {
     private func makeTracker(
         idleTime: Double? = 0.0,
         displaySleepAssertion: Bool = false,
-        currentDateProvider: @escaping () -> Date = Date.init
+        currentDateProvider: @escaping () -> Date = Date.init,
+        debugLog: LocalDebugLogging? = nil
     ) -> ActivityTracker {
         ActivityTracker(
             startTimer: false,
             systemIdleTimeProvider: { idleTime },
             displaySleepAssertionProvider: { displaySleepAssertion },
-            currentDateProvider: currentDateProvider
+            currentDateProvider: currentDateProvider,
+            debugLog: debugLog
         )
     }
 
@@ -565,6 +641,14 @@ private final class MockLaunchAtLoginService: LaunchAtLoginService {
         }
 
         isEnabled = enabled
+    }
+}
+
+private final class CapturingDebugLog: LocalDebugLogging {
+    var messages: [String] = []
+
+    func write(_ message: String) {
+        messages.append(message)
     }
 }
 

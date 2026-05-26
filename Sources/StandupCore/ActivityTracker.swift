@@ -25,6 +25,7 @@ public class ActivityTracker: ObservableObject {
     
     private var timer: Timer?
     private var notificationObservers: [Any] = []
+    private var distributedNotificationObservers: [Any] = []
     
     private var isTesting: Bool {
         return NSClassFromString("XCTestCase") != nil
@@ -34,6 +35,17 @@ public class ActivityTracker: ObservableObject {
     private var systemIdleTimeProvider: () -> Double?
     private var displaySleepAssertionProvider: () -> Bool
     private var currentDateProvider: () -> Date
+    private let debugLog: LocalDebugLogging?
+    private var lastLoggedActiveMinute = 0
+    private var isScreenLocked = false
+
+    public enum ResetReason: String {
+        case manual
+        case screenLocked = "screen_locked"
+        case screenUnlocked = "screen_unlocked"
+        case screenSleep = "screen_sleep"
+        case sessionResigned = "session_resigned"
+    }
     
     public init(
         startTimer: Bool = true,
@@ -71,23 +83,30 @@ public class ActivityTracker: ObservableObject {
             }
             return false
         },
-        currentDateProvider: @escaping () -> Date = Date.init
+        currentDateProvider: @escaping () -> Date = Date.init,
+        debugLog: LocalDebugLogging? = nil
     ) {
         self.systemIdleTimeProvider = systemIdleTimeProvider
         self.displaySleepAssertionProvider = displaySleepAssertionProvider
         self.currentDateProvider = currentDateProvider
+        self.debugLog = debugLog
         
         if startTimer {
             startTracking()
         }
         setupNotifications()
         requestNotificationPermission()
+        logState("tracker.started")
     }
     
     deinit {
         let nc = NSWorkspace.shared.notificationCenter
         for observer in notificationObservers {
             nc.removeObserver(observer)
+        }
+        let dnc = DistributedNotificationCenter.default()
+        for observer in distributedNotificationObservers {
+            dnc.removeObserver(observer)
         }
     }
     
@@ -97,12 +116,14 @@ public class ActivityTracker: ObservableObject {
         }
     }
     
-    public func reset() {
+    public func reset(reason: ResetReason = .manual) {
+        logState("reset reason=\(reason.rawValue)")
         activeSeconds = 0
         idleSeconds = 0
         isIdle = false
         needsStandUp = false
         snoozeUntil = nil
+        lastLoggedActiveMinute = 0
     }
 
     public func snoozeReminder(for duration: TimeInterval) {
@@ -111,40 +132,82 @@ public class ActivityTracker: ObservableObject {
         if needsStandUp {
             needsStandUp = false
         }
+        logState("reminder.snoozed duration=\(Int(duration))")
     }
 
     public func setTargetActiveSeconds(_ seconds: TimeInterval) {
-        targetActiveSeconds = StandupTimingOptions.normalizedTargetActiveSeconds(seconds)
+        let normalizedSeconds = StandupTimingOptions.normalizedTargetActiveSeconds(seconds)
+        guard targetActiveSeconds != normalizedSeconds else { return }
+        targetActiveSeconds = normalizedSeconds
+        logState("target.changed target=\(Int(normalizedSeconds))")
     }
     
     private func setupNotifications() {
         let nc = NSWorkspace.shared.notificationCenter
         
         let screenSleepObserver = nc.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.reset()
+            self?.reset(reason: .screenSleep)
         }
         let sessionResignObserver = nc.addObserver(forName: NSWorkspace.sessionDidResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.reset()
+            self?.reset(reason: .sessionResigned)
         }
         
         notificationObservers = [screenSleepObserver, sessionResignObserver]
+
+        let dnc = DistributedNotificationCenter.default()
+        let screenLockObserver = dnc.addObserver(
+            forName: Notification.Name("com.apple.screenIsLocked"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleScreenLocked()
+        }
+        let screenUnlockObserver = dnc.addObserver(
+            forName: Notification.Name("com.apple.screenIsUnlocked"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleScreenUnlocked()
+        }
+
+        distributedNotificationObservers = [screenLockObserver, screenUnlockObserver]
+    }
+
+    func handleScreenLocked() {
+        isScreenLocked = true
+        reset(reason: .screenLocked)
+    }
+
+    func handleScreenUnlocked() {
+        isScreenLocked = false
+        reset(reason: .screenUnlocked)
     }
     
     public func tick() {
+        guard !isScreenLocked else { return }
+
         let systemIdle = systemIdleTimeProvider() ?? 0
 
         let hasRecentInteraction = systemIdle < idleThresholdSeconds || displaySleepAssertionProvider()
+        let wasIdle = isIdle
 
         activeSeconds += 1
 
         if hasRecentInteraction {
             idleSeconds = 0
             isIdle = false
+            if wasIdle {
+                logState("screen.active")
+            }
         } else {
             isIdle = true
             idleSeconds += 1
+            if !wasIdle {
+                logState("screen.quiet")
+            }
         }
 
+        logProgressMilestoneIfNeeded()
         updateReminderStateIfNeeded()
     }
 
@@ -157,6 +220,7 @@ public class ActivityTracker: ObservableObject {
             }
         } else if !needsStandUp {
             needsStandUp = true
+            logState("reminder.triggered")
             triggerReminder()
         }
     }
@@ -169,6 +233,7 @@ public class ActivityTracker: ObservableObject {
         }
 
         self.snoozeUntil = nil
+        logState("reminder.snooze_expired")
         return false
     }
     
@@ -184,9 +249,12 @@ public class ActivityTracker: ObservableObject {
         content.sound = .default
         
         let request = UNNotificationRequest(identifier: "StandupReminder", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request) { error in
+        UNUserNotificationCenter.current().add(request) { [debugLog] error in
             if let error = error {
                 print("Failed to deliver notification: \(error)")
+                debugLog?.write("notification.delivery_failed error=\(error.localizedDescription)")
+            } else {
+                debugLog?.write("notification.delivered")
             }
         }
     }
@@ -197,10 +265,31 @@ public class ActivityTracker: ObservableObject {
             return
         }
         
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [debugLog] granted, error in
+            debugLog?.write("notification.authorization granted=\(granted)")
             if let error = error {
                 print("Notification permission error: \(error)")
+                debugLog?.write("notification.authorization_failed error=\(error.localizedDescription)")
             }
         }
+    }
+
+    private func logProgressMilestoneIfNeeded() {
+        let activeMinute = Int(activeSeconds / 60)
+        guard activeMinute > 0,
+              activeMinute % 5 == 0,
+              activeMinute != lastLoggedActiveMinute else {
+            return
+        }
+
+        lastLoggedActiveMinute = activeMinute
+        logState("screen.progress minutes=\(activeMinute)")
+    }
+
+    private func logState(_ event: String) {
+        let snoozeValue = snoozeUntil.map { String(Int($0.timeIntervalSince1970)) } ?? "nil"
+        debugLog?.write(
+            "\(event) active=\(Int(activeSeconds)) idle=\(Int(idleSeconds)) target=\(Int(targetActiveSeconds)) isIdle=\(isIdle) locked=\(isScreenLocked) needsStandUp=\(needsStandUp) snoozeUntil=\(snoozeValue)"
+        )
     }
 }
