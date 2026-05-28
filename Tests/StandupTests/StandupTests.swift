@@ -529,6 +529,8 @@ final class StandupTests: XCTestCase {
         XCTAssertTrue(readme.contains("Standup is local-only"))
         XCTAssertTrue(readme.contains("continuous screen-session time"))
         XCTAssertTrue(readme.contains("keeps counting while the user session stays awake"))
+        XCTAssertTrue(readme.contains("sudo xattr -dr com.apple.quarantine /Applications/Standup.app"))
+        XCTAssertTrue(readme.contains("not Developer ID signed or notarized"))
         XCTAssertTrue(readme.contains("[SECURITY.md](SECURITY.md)"))
         XCTAssertTrue(readme.contains("[docs/security.md](docs/security.md)"))
         XCTAssertTrue(readme.contains("[CONTRIBUTING.md](CONTRIBUTING.md)"))
@@ -547,6 +549,8 @@ final class StandupTests: XCTestCase {
         XCTAssertTrue(securityDoc.contains("standup.log"))
         XCTAssertTrue(securityDoc.contains("Sign and notarize public binary builds"))
         XCTAssertTrue(securityDoc.contains("ad-hoc signed development zip archives"))
+        XCTAssertTrue(securityDoc.contains("xattr"))
+        XCTAssertTrue(securityDoc.contains("checksum verification"))
 
         let gitignore = try projectFile(".gitignore")
         XCTAssertTrue(gitignore.contains(".build/"))

@@ -26,6 +26,19 @@ open build/Standup.app
 
 `build.sh` creates `build/Standup.app` and copies the bundled icon and animation resources into the app bundle.
 
+## Install Release ZIPs
+
+Current GitHub release ZIPs are ad-hoc signed development builds. They are not Developer ID signed or notarized yet, so macOS Gatekeeper may block the first launch after download.
+
+After confirming that the ZIP came from the project release page and that its checksum matches the release notes, technical users can install the app into `/Applications` and remove the download quarantine attribute:
+
+```sh
+sudo xattr -dr com.apple.quarantine /Applications/Standup.app
+open /Applications/Standup.app
+```
+
+For broad distribution, Standup should use Developer ID signing and notarization instead of asking users to remove quarantine manually.
+
 ## Privacy And Security
 
 Standup is local-only in the current codebase. It does not include an app network client, telemetry, accounts, or cloud sync. It reads macOS idle and power assertion state to distinguish recent input from quiet screen time, stores the target timing preference in local user defaults, writes a small rotating debug log on the Mac, requests notification permission, and can register itself as a login item when the user enables Start at Login.

@@ -20,7 +20,7 @@ Before publishing a tagged release:
 3. Run `swift test`.
 4. Run `./build.sh`.
 5. Confirm `.build/`, `build/`, local `.app` bundles, and release zip files are not staged.
-6. State signing and notarization status in GitHub release notes.
+6. State signing and notarization status in GitHub release notes and keep the README install guidance aligned.
 
 ## Ongoing Maintenance Rules
 

@@ -43,4 +43,4 @@ Before publishing a public release:
 5. Enable GitHub Security Advisories or provide another private vulnerability reporting channel.
 6. Sign and notarize public binary builds if distributing prebuilt apps.
 
-Current public release packages are ad-hoc signed development zip archives, not Developer ID signed or notarized. Release notes must state this status so users understand the macOS Gatekeeper tradeoff before downloading.
+Current public release packages are ad-hoc signed development zip archives, not Developer ID signed or notarized. Release notes and `README.md` must state this status so users understand the macOS Gatekeeper tradeoff before downloading. If release notes provide an `xattr` quarantine removal command, present it as an explicit trust decision after checksum verification, not as the long-term distribution path. Broad distribution should move to Developer ID signing and notarization.
