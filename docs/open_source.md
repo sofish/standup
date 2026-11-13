@@ -18,7 +18,7 @@ Before publishing a tagged release:
 1. Confirm generated image and icon assets can be redistributed in an open-source repository.
 2. Enable GitHub Security Advisories or publish a private security contact.
 3. Run `swift test`.
-4. Run `./build.sh`.
+4. Run `python3 -m unittest discover -s Tests/ReleaseBuildTests -v` and follow [release.md](release.md) to build, sign, notarize, and validate the release from committed, pushed primary-branch source.
 5. Confirm `.build/`, `build/`, local `.app` bundles, and release zip files are not staged.
 6. State signing and notarization status in GitHub release notes and keep the README install guidance aligned.
 

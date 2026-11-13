@@ -8,11 +8,14 @@ Use the local SwiftPM workflow:
 
 ```sh
 swift test
+python3 -m unittest discover -s Tests/ReleaseBuildTests -v
 ./build.sh
 open build/Standup.app
 ```
 
 Keep behavior, tests, and docs in sync. UI changes should be verified in a running macOS app bundle because menu bar and overlay rendering can differ from source-level assumptions.
+
+The release-build tests require Python 3.8+ and macOS packaging tools. They exercise the real build script with isolated compiler/signing stubs, including signing failures, ZIP contents, and checksums; no signing credentials or notarization uploads are used. Real Developer ID verification remains a separate release acceptance check in [docs/release.md](docs/release.md).
 
 ## Security Reports
 

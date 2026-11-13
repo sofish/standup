@@ -77,19 +77,6 @@ final class StandupTests: XCTestCase {
         }
     }
 
-    func testBuildScriptDeclaresApplicationIcon() throws {
-        let buildScriptURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("build.sh")
-        let buildScript = try String(contentsOf: buildScriptURL, encoding: .utf8)
-
-        XCTAssertTrue(buildScript.contains("<key>CFBundleIconFile</key>"))
-        XCTAssertTrue(buildScript.contains("<string>AppIcon.icns</string>"))
-        XCTAssertTrue(buildScript.contains("<key>CFBundleShortVersionString</key>"))
-        XCTAssertTrue(buildScript.contains("<string>1.0.3</string>"))
-        XCTAssertTrue(buildScript.contains("<key>CFBundleVersion</key>"))
-        XCTAssertTrue(buildScript.contains("<string>4</string>"))
-    }
-
     func testGeneratedAnimationUsesSequenceEndpoints() {
         XCTAssertEqual(MenuBarIconMetrics.sittingFrameIndex, 0)
         XCTAssertEqual(MenuBarIconMetrics.standingFrameIndex, MenuBarIconMetrics.animationFrameCount - 1)
@@ -577,6 +564,7 @@ final class StandupTests: XCTestCase {
             "docs/architecture.md",
             "docs/implementation_plan.md",
             "docs/open_source.md",
+            "docs/release.md",
             "docs/security.md"
         ] {
             let content = try projectFile(path)

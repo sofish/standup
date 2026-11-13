@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "coverage": "Local Swift behavior, release packaging regression tests, shell syntax, and diff hygiene. Real Developer ID signing and extracted-app launch are recorded separately in release evidence. These checks do not certify notarization, Gatekeeper acceptance, upgrade UI, or public delivery.",
+  "checks": [
+    {
+      "id": "swift-tests",
+      "criteria": "The Swift application behavior and repository policy tests pass.",
+      "argv": ["/usr/bin/swift", "test"],
+      "inputs": ["Package.swift"],
+      "gitSource": ["."],
+      "verifierInputs": ["Package.swift", "Tests/StandupTests/StandupTests.swift"],
+      "timeoutMs": 120000
+    },
+    {
+      "id": "release-packaging-tests",
+      "criteria": "Release packaging, native requirement parsing, failure handling, archive contents, and checksums pass without signing credentials.",
+      "argv": ["/usr/bin/python3", "-B", "-m", "unittest", "discover", "-s", "Tests/ReleaseBuildTests", "-v"],
+      "inputs": ["build.sh"],
+      "gitSource": ["."],
+      "verifierInputs": ["Tests/ReleaseBuildTests/test_build.py", "/usr/bin/csreq", "/usr/bin/ditto"],
+      "timeoutMs": 120000
+    },
+    {
+      "id": "shell-and-diff",
+      "criteria": "The build script parses and the worktree diff has no whitespace errors.",
+      "argv": ["/bin/bash", "-c", "/bin/bash -n build.sh && /usr/bin/git diff --check"],
+      "inputs": ["build.sh"],
+      "gitSource": ["."],
+      "verifierInputs": [".pipi/acceptance.json"],
+      "timeoutMs": 30000
+    }
+  ],
+  "review": {
+    "simplifyExemptPaths": ["docs/", "README.md", "CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md", "Tests/"]
+  }
+}

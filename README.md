@@ -20,15 +20,30 @@ Standup is a native macOS menu bar app that reminds you to stand up after a conf
 
 ```sh
 swift test
+python3 -m unittest discover -s Tests/ReleaseBuildTests -v
 ./build.sh
 open build/Standup.app
 ```
 
 `build.sh` creates `build/Standup.app` and copies the bundled icon and animation resources into the app bundle.
 
+## Signed Builds
+
+```sh
+./build.sh --signed
+```
+
+This creates a Developer ID signed app, a ZIP, and its SHA-256 checksum in `build/signed/`. It uses Hardened Runtime and a secure timestamp, and stops if signing or Developer ID verification fails. A valid Developer ID Application certificate and its private key must be available in the current user's Keychain. Set `SIGNING_IDENTITY` to select a certificate name or SHA-1 when needed.
+
+The ZIP targets the build Mac's architecture (`arm64` or `x86_64`). It is a **local candidate, not notarized or ready for public distribution**. Follow [docs/release.md](docs/release.md) for source publication, notarization, ticket stapling, and release acceptance. The signing step contacts Apple's timestamp service; it does not upload the app for notarization or publish a GitHub release.
+
 ## Install Release ZIPs
 
-Current GitHub release ZIPs are ad-hoc signed development builds. They are not Developer ID signed or notarized yet, so macOS Gatekeeper may block the first launch after download.
+For a notarized release, verify the ZIP against its published `.sha256` file, expand it, move `Standup.app` into `/Applications`, and open it normally. The release notes identify the supported architecture and the signing/notarization status of that specific download.
+
+### Legacy Releases
+
+GitHub release ZIPs through v1.0.3 are ad-hoc signed development builds. They are not Developer ID signed or notarized, so macOS Gatekeeper may block the first launch after download. The v1.0.4 signing workflow does not change those existing downloads.
 
 After confirming that the ZIP came from the project release page and that its checksum matches the release notes, technical users can install the app into `/Applications` and remove the download quarantine attribute:
 
@@ -37,7 +52,7 @@ sudo xattr -dr com.apple.quarantine /Applications/Standup.app
 open /Applications/Standup.app
 ```
 
-For broad distribution, Standup should use Developer ID signing and notarization instead of asking users to remove quarantine manually.
+Future signed releases must complete Developer ID signing and notarization before publication. They should launch through normal macOS Gatekeeper checks without removing quarantine manually.
 
 ## Privacy And Security
 

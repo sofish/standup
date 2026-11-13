@@ -8,3 +8,4 @@ build/
 *.xcuserstate
 xcuserdata/
 .vscode/
+__pycache__/
